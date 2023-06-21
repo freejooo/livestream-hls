@@ -1,0 +1,1 @@
+mpv $(yt-dlp -f b  --get-url "https://www.youtube.com/watch?v=Jmws_bNRG6Q" )
