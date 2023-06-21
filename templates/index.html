@@ -4,28 +4,26 @@
     <title>Live Stream</title>
     <link href="https://unpkg.com/video.js@7.15.0/dist/video-js.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css?family=Roboto:400,700&display=swap" rel="stylesheet">
+    
     <style>
-        /* CSS styles */
-
         body {
             font-family: 'Roboto', sans-serif;
             margin: 0;
             padding: 0;
-        }
-
-        #my_video_1 {
-            width: 960px;
-            height: 540px;
+            background: #0E0E10;
+            color: #fff;
         }
 
         #chat-container {
             position: fixed;
             bottom: 0;
-            left: 0;
-            width: 100%;
-            background-color: #1f1f1f;
-            padding: 10px;
+            right: 0;
+            width: 30%;
+            height: 100%;
+            background-color: #18181b;
+            padding: 20px;
             box-sizing: border-box;
+            overflow: hidden;
         }
 
         #messages {
@@ -33,63 +31,55 @@
             margin: 0;
             padding: 0;
             overflow-y: auto;
-            max-height: 200px;
+            height: 85%;
+            scrollbar-width: thin;
+            scrollbar-color: #646464 #18181b;
+        }
+
+        #messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #messages::-webkit-scrollbar-track {
+            background: #18181b;
+        }
+
+        #messages::-webkit-scrollbar-thumb {
+            background-color: #646464;
+            border-radius: 20px;
+            border: 3px solid #18181b;
         }
 
         #messages li {
             margin-bottom: 10px;
             word-wrap: break-word;
             white-space: pre-wrap;
-            color: #fff;
         }
 
         #messages li span.username {
             font-weight: bold;
+            color: #9147ff;
         }
 
         #chat-form {
             display: flex;
             align-items: center;
-        }
-
-        #input-username,
-        #input-message,
-        #captcha-text {
-            padding: 5px;
-            border-radius: 3px;
-            border: none;
+            height: 15%;
         }
 
         #input-username,
         #input-message {
+            padding: 5px;
+            border-radius: 3px;
+            border: none;
+            background: #0e0e10;
+            color: #fff;
             flex: 1;
             margin-right: 5px;
         }
 
-        #captcha-container {
-            display: flex;
-            align-items: center;
-            margin-right: 5px;
-        }
-
-        #captcha-img {
-            margin-right: 5px;
-            cursor: pointer;
-        }
-
-        #captcha-refresh {
-            cursor: pointer;
-            color: #aaa;
-            font-size: 14px;
-            margin-right: 5px;
-        }
-
-        #captcha-text {
-            width: 120px;
-            margin-right: 5px;
-        }
-
-        #chat-form button {
+        #chat-form button,
+        #minimize-chat {
             padding: 5px 10px;
             background-color: #9147ff;
             border: none;
@@ -98,10 +88,17 @@
             cursor: pointer;
         }
 
-        #chat-form button:hover {
+        #chat-form button:hover,
+        #minimize-chat:hover {
             background-color: #803eff;
         }
+
+        #minimize-chat {
+            display: block;
+            margin-bottom: 10px;
+        }
     </style>
+
     <script src="https://unpkg.com/video.js@7.15.0/dist/video.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
 </head>
@@ -109,90 +106,123 @@
     <video id="my_video_1" class="video-js vjs-default-skin" controls preload="auto" data-setup='{}'>
         <source src="/hls/output.m3u8" type="application/x-mpegURL">
     </video>
-    <div id="chat-container">
-        <ul id="messages"></ul>
-        <form id="chat-form" action="">
+    <div id="verification-container">
+        <form id="verification-form" action="">
             <input id="input-username" autocomplete="off" placeholder="Username" required>
-            <input id="input-message" autocomplete="off" placeholder="Type your message..." required>
             <div id="captcha-container">
                 <img id="captcha-img" src="/captcha" alt="CAPTCHA">
                 <span id="captcha-refresh">⟳</span>
                 <input id="captcha-text" type="text" placeholder="Enter CAPTCHA" required>
             </div>
+            <button type="submit">Enter Chat</button>
+        </form>
+    </div>
+    <div id="chat-container" style="display:none;">
+        <button id="minimize-chat">Minimize Chat</button>
+        <ul id="messages"></ul>
+        <form id="chat-form" action="">
+            <input id="input-message" autocomplete="off" placeholder="Type your message..." required>
             <button type="submit">Send</button>
         </form>
     </div>
     <script>
         // JavaScript code
-// JavaScript code
 
-const player = videojs('my_video_1');
-player.play();
+        const player = videojs('my_video_1');
+        player.play();
 
-const socket = io();
+        const socket = io();
 
-const form = document.getElementById('chat-form');
-const inputUsername = document.getElementById('input-username');
-const inputMessage = document.getElementById('input-message');
-const messages = document.getElementById('messages');
-const captchaImg = document.getElementById('captcha-img');
-const captchaRefresh = document.getElementById('captcha-refresh');
-const captchaText = document.getElementById('captcha-text');
+        const verificationForm = document.getElementById('verification-form');
+        const chatContainer = document.getElementById('chat-container');
+        const verificationContainer = document.getElementById('verification-container');
+        const inputUsername = document.getElementById('input-username');
+        const captchaText = document.getElementById('captcha-text');
+        const captchaRefresh = document.getElementById('captcha-refresh');
+        const captchaImg = document.getElementById('captcha-img');
+        const minimizeChatButton = document.getElementById('minimize-chat');
 
-form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const username = inputUsername.value.trim() || 'Anonymous';
-    const message = inputMessage.value.trim();
-    const captcha = captchaText.value.trim();
-    if (message && captcha) {
-        verifyCaptcha(captcha)
-            .then((isValid) => {
-                if (isValid) {
-                    const chatMessage = `${username}: ${message}`;
-                    socket.emit('chat_message', chatMessage);
-                    inputMessage.value = '';
-                    captchaText.value = '';
-                    refreshCaptcha();
-                } else {
-                    alert('Invalid CAPTCHA!');
-                    refreshCaptcha();
-                }
-            })
-            .catch((error) => {
-                console.error('CAPTCHA verification failed:', error);
-            });
+        verificationForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = inputUsername.value.trim();
+            const captcha = captchaText.value.trim();
+            if (username && captcha) {
+                verifyCaptcha(captcha)
+                    .then((isValid) => {
+                        if (isValid) {
+                            verificationContainer.style.display = 'none';
+                            chatContainer.style.display = 'block';
+                            initializeChat(username);
+                        } else {
+                            alert('Invalid CAPTCHA!');
+                            refreshCaptcha();
+                        }
+                    })
+                    .catch((error) => {
+                        console.error('CAPTCHA verification failed:', error);
+                    });
+            }
+        });
+
+minimizeChatButton.addEventListener('click', () => {
+    if (chatContainer.classList.contains('minimized')) {
+        chatContainer.style.width = '30%';
+        chatContainer.style.height = '100%';
+        minimizeChatButton.innerText = 'Minimize Chat';
+        chatContainer.classList.remove('minimized');
+    } else {
+        chatContainer.style.width = '200px';
+        chatContainer.style.height = '40px';
+        minimizeChatButton.innerText = 'Maximize Chat';
+        chatContainer.classList.add('minimized');
     }
 });
 
-socket.on('chat_message', (message) => {
-    const li = document.createElement('li');
-    li.textContent = message;
-    messages.appendChild(li);
-});
 
-captchaRefresh.addEventListener('click', refreshCaptcha);
+        function initializeChat(username) {
+            const inputMessage = document.getElementById('input-message');
+            const messages = document.getElementById('messages');
+            const chatForm = document.getElementById('chat-form');
 
-function verifyCaptcha(captchaText) {
-    return fetch('/verify_captcha', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `captcha_text=${captchaText}`,
-    })
-        .then((response) => response.json())
-        .then((data) => data.success)
-        .catch((error) => {
-            console.error('CAPTCHA verification failed:', error);
-            return false;
-        });
-}
+            chatForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const message = inputMessage.value.trim();
+                if (message) {
+                    const chatMessage = `${username}: ${message}`;
+                    socket.emit('chat_message', chatMessage);
+                    inputMessage.value = '';
+                }
+            });
 
-function refreshCaptcha() {
-    captchaImg.src = `/captcha?${new Date().getTime()}`;
-}
+            socket.on('chat_message', (message) => {
+                const li = document.createElement('li');
+                li.textContent = message;
+                messages.appendChild(li);
+                messages.scrollTop = messages.scrollHeight;  // Auto scroll to the bottom
+            });
+        }
 
+        captchaRefresh.addEventListener('click', refreshCaptcha);
 
+        function verifyCaptcha(captchaText) {
+            return fetch('/verify_captcha', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `captcha_text=${captchaText}`,
+            })
+                .then((response) => response.json())
+                .then((data) => data.success)
+                .catch((error) => {
+                    console.error('CAPTCHA verification failed:', error);
+                    return false;
+                });
+        }
+
+        function refreshCaptcha() {
+            captchaImg.src = `/captcha?${new Date().getTime()}`;
+        }
     </script>
 </body>
 </html>
